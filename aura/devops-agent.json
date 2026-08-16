@@ -1,0 +1,66 @@
+{
+  "_comment": [
+    "Aura Agent configuration for the DevOpsDays workshop.",
+    "",
+    "The console can export an agent to JSON and import one from JSON, so this",
+    "file is both the catch-up path for step 06 and a record of what the",
+    "click-through produces.",
+    "",
+    "Verified against the live Aura API. The tool `type` must be one of exactly",
+    "three values -- text2cypher, cypherTemplate, similaritySearch -- and the",
+    "similaritySearch config keys are snake_case: provider, model, index, top_k.",
+    "All four are required; there is no node-label or text-property field,",
+    "because the vector index already knows both.",
+    "",
+    "`model` must match EMBEDDING_MODEL from step 02. If it does not, the tool",
+    "returns nothing and reports no error, because the agent is embedding the",
+    "query into a different vector space than the one your index was built in."
+  ],
+
+  "name": "DevOps Graph Agent",
+  "description": "Answers questions about a microservices architecture, its dependencies, the teams that own it, and the work in flight against it.",
+
+  "system_prompt": "You answer questions about a microservices architecture stored in a Neo4j knowledge graph.\n\nThe graph holds Microservice, Task, Team and Person nodes. Services DEPENDS_ON other services and are MAINTAINED_BY a team. Tasks are ASSIGNED_TO a team and LINKED_TO the service they touch. People are PART_OF a team. There is no direct edge from a Person to a Task: to find what someone is working on, go Person -> PART_OF -> Team <- ASSIGNED_TO <- Task.\n\nRouting: use the similarity search tool for questions about what a task describes or means. Use a Cypher tool for anything countable, rankable, or relational. Never answer a 'how many' question from similarity search results -- it returns a fixed number of nearest matches, so its result count is a property of the search, not of the graph.\n\nThe graph is the only source of truth. Several services (Database, Cache, MessageQueue, ExternalAPI) have no team recorded as maintaining them; if asked, say that plainly rather than guessing from general knowledge about microservices.",
+
+  "tools": [
+    {
+      "name": "Task impact and ownership",
+      "type": "similaritySearch",
+      "enabled": true,
+      "description": "Semantic search over engineering task descriptions, with graph context attached. Use this for questions that start from a fuzzy description rather than an exact value: what a task involves, work matching a theme such as 'performance' or 'security', who to talk to about a piece of work, or what would be affected if it goes wrong. For every match it also returns the service the task touches, the team that owns that service, the team doing the work, and every service that depends on it. Do NOT use this to count, total, rank or aggregate anything: it returns a fixed number of nearest matches, so counting its results tells you about the search parameters and nothing about the graph.",
+      "config": {
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+        "index": "task_embeddings",
+        "top_k": 4,
+        "dimensions": 1536,
+        "post_processing_cypher": "MATCH (node)-[:LINKED_TO]->(svc:Microservice)\nOPTIONAL MATCH (svc)-[:MAINTAINED_BY]->(owner:Team)\nOPTIONAL MATCH (node)-[:ASSIGNED_TO]->(doing:Team)\nWITH node, score, svc, owner, doing,\n     COLLECT {\n       MATCH (d:Microservice)-[:DEPENDS_ON]->(svc)\n       OPTIONAL MATCH (d)-[:MAINTAINED_BY]->(dteam:Team)\n       RETURN d.name + ' (owned by ' + coalesce(dteam.name, 'NOBODY') + ')'\n     } AS dependents\nRETURN node.name AS task, node.status AS status, node.description AS text, score,\n       svc.name AS service,\n       coalesce(owner.name, 'NOBODY') AS service_owned_by,\n       coalesce(doing.name, 'nobody') AS task_assigned_to,\n       dependents AS services_that_would_break"
+      }
+    },
+    {
+      "name": "Work in flight for a person",
+      "type": "cypherTemplate",
+      "enabled": true,
+      "description": "Given a person's name, returns the tasks their team is assigned, with the service each task touches. Use this for questions like 'what is Alice working on?'. Prefer this over free-form Cypher for per-person questions: it already encodes the two-hop path through Team that people forget exists.",
+      "config": {
+        "parameters": [
+          {
+            "name": "personName",
+            "data_type": "string",
+            "description": "The person's first name as recorded in the graph, e.g. Alice.",
+            "is_list": false,
+            "is_optional": false
+          }
+        ],
+        "template": "MATCH (p:Person {name: $personName})-[:PART_OF]->(team:Team)<-[:ASSIGNED_TO]-(t:Task) OPTIONAL MATCH (t)-[:LINKED_TO]->(s:Microservice) RETURN p.name AS person, team.name AS team, t.name AS task, t.status AS status, t.description AS description, s.name AS service ORDER BY status, task"
+      }
+    },
+    {
+      "name": "Natural language to Cypher",
+      "type": "text2cypher",
+      "enabled": true,
+      "description": "Converts a natural-language question into a Cypher query, runs it, and returns the rows. Use this for anything countable, rankable or relational that no more specific tool covers: how many tasks are open, which team has the most work, which services depend on the Database directly or indirectly. Pass the user's full question as a sentence.",
+      "config": {}
+    }
+  ]
+}

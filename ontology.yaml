@@ -1,0 +1,72 @@
+# The ontology, written down.
+#
+# This file does not execute. That is the point.
+#
+# In the GraphAcademy `kg_structured_builder.py` the equivalent lists — NODE_TYPES,
+# RELATIONSHIP_TYPES, PATTERNS — are fed to SimpleKGPipeline so an LLM can extract
+# a graph from PDFs. We are not extracting anything today (our graph arrives
+# already structured), but the discipline transfers: decide your node types,
+# relationship types, and legal patterns BEFORE you point an LLM at your data.
+#
+# Two things read this in practice:
+#   - text2cypher, indirectly, via the schema it introspects from the database
+#   - you, when you write the Aura Agent system prompt in step 06
+#
+# An LLM writing Cypher against a graph nobody bothered to define will invent
+# relationships that sound plausible. `(:Team)-[:OWNS]->(:Microservice)` reads
+# fine and returns zero rows, because the edge here is MAINTAINED_BY and it
+# points the other way.
+
+node_types:
+  - label: Microservice
+    description: A deployable service in the architecture.
+    properties:
+      - {name: name, type: STRING, required: true}
+      - {name: technology, type: STRING}
+      - {name: embedding, type: LIST, note: "absent — we only embed Tasks"}
+
+  - label: Task
+    description: A unit of work. The description property is free prose.
+    properties:
+      - {name: name, type: STRING, required: true}
+      - {name: description, type: STRING, required: true}
+      - {name: status, type: STRING, enum: [open, in progress, completed]}
+      - {name: embedding, type: LIST, note: "added by step 02"}
+    # Deliberate wart, kept from the source dataset: two distinct tasks are both
+    # named 'Optimize'. `name` is therefore NOT a unique key. Step 02 uses
+    # elementId() to write embeddings back, not name — the video-context-graph
+    # lesson ("MERGE by a normalized key") in its negative form.
+    natural_key: null
+
+  - label: Team
+    properties:
+      - {name: name, type: STRING, required: true}
+
+  - label: Person
+    properties:
+      - {name: name, type: STRING, required: true}
+
+relationship_types:
+  - DEPENDS_ON
+  - MAINTAINED_BY
+  - ASSIGNED_TO
+  - LINKED_TO
+  - PART_OF
+
+# The legal shapes. Anything not in this list is a hallucination.
+patterns:
+  - [Microservice, DEPENDS_ON, Microservice]
+  - [Microservice, MAINTAINED_BY, Team]
+  - [Task, ASSIGNED_TO, Team]
+  - [Task, LINKED_TO, Microservice]
+  - [Person, PART_OF, Team]
+
+# Known gaps in the data. Useful for demos, because an honest agent should say
+# "no team is recorded" rather than guess.
+known_gaps:
+  - "Database, Cache, MessageQueue and ExternalAPI have no MAINTAINED_BY edge.
+     Ask 'who maintains the Database?' — a good agent says nobody is recorded."
+  - "Person has no direct edge to Task. 'What is Alice working on?' requires the
+     two-hop (:Person)-[:PART_OF]->(:Team)<-[:ASSIGNED_TO]-(:Task). Vector search
+     cannot answer it at all; this is the question that justifies the graph."
+  - "Only Platform and Fulfillment have two members; Accounts and Revenue have one each."

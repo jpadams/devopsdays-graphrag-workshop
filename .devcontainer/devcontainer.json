@@ -1,0 +1,63 @@
+{
+  "name": "DevOpsDays GraphRAG Workshop",
+
+  // Python 3.12: pyproject asks for >=3.10,<3.14, and 3.12 is the safest point
+  // in that range for the wheels langchain and the Neo4j driver pull in.
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+
+  // Prompted for at Codespace creation and injected as real environment
+  // variables. steps/_common.py reads os.getenv and load_dotenv does NOT
+  // override real env vars, so these work with no .env file at all — which is
+  // the whole reason the Codespace path is less fiddly than the laptop one.
+  // All FIVE are prompted, including username and database. Those two look
+  // skippable and are not: some Aura instances use the instance id (the 8
+  // characters in the hostname) as the username and database rather than
+  // "neo4j", and guessing wrong produces a bare "unauthorized". Copy all five
+  // out of the credentials file Aura made you download.
+  //
+  // Leaving these blank is fine if you would rather paste a .env instead —
+  // see .devcontainer/setup.sh, which falls back to that.
+  "secrets": {
+    "NEO4J_URI": {
+      "description": "e.g. neo4j+s://a1b2c3d4.databases.neo4j.io",
+      "documentationUrl": "https://console.neo4j.io"
+    },
+    "NEO4J_USERNAME": {
+      "description": "From the credentials file. Usually 'neo4j', but NOT always — check.",
+      "documentationUrl": "https://console.neo4j.io"
+    },
+    "NEO4J_PASSWORD": {
+      "description": "The password Aura showed you once, when the instance was created.",
+      "documentationUrl": "https://console.neo4j.io"
+    },
+    "NEO4J_DATABASE": {
+      "description": "From the credentials file. Usually 'neo4j', but NOT always — check.",
+      "documentationUrl": "https://console.neo4j.io"
+    },
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key. Set a $5 spend limit on it first.",
+      "documentationUrl": "https://platform.openai.com/api-keys"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  // 2 cores is enough — nothing here is CPU bound, it is all waiting on Aura
+  // and OpenAI. Attendees on the free Codespaces tier get more hours this way.
+  "hostRequirements": {
+    "cpus": 2
+  }
+}
