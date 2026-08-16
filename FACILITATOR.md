@@ -18,7 +18,7 @@ that go wrong.
 | 1:05 | **`make text2cypher`** (12) | Now let the model write it. Read every query aloud. |
 | 1:17 | **`make agent`** (13) | Tool descriptions are the lesson, not `create_agent`. |
 | 1:30 | **Step 08 in the console** (25) | No code. Everyone builds it. |
-| 1:55 | **Close** (5) | Invoke it as an endpoint / MCP. |
+| 1:55 | **Close** (5) | Invoke it as an endpoint / MCP — *your* agent, not theirs. Paid feature; see Close. |
 
 The four retrieval steps are ordered by what they give up, and each is motivated
 by the previous one's limitation. Say that out loud at 0:30 so the room knows a
@@ -161,9 +161,29 @@ Worth quoting; it is the honest version of what everyone's first agent does.
 
 Aura console → **Agents** → *Create agent*.
 
-**Name** `DevOps Graph Agent`
-**Instance** the one from step 01
-**System prompt** — copy from `aura/devops-agent.json` (or write one live)
+The form, in the order it presents the fields — the console's labels, not the
+JSON's:
+
+| Console field | What to put in it |
+|---|---|
+| **Name** | `DevOps Graph Agent` |
+| **Description** | the `description` from `aura/devops-agent.json` |
+| **Prompt instruction** | the `system_prompt` from that same file (or write one live). Note the console calls it *Prompt instruction*, not "system prompt" |
+| **Instance** | the one from step 01 |
+| **Agent location** | pre-filled from the instance; nothing to do |
+| **Access** | **leave it on Internal.** See below |
+| **Enable MCP server** | greyed out, and stays that way. It needs External |
+
+> **Say something about Access before anyone clicks past it.** The two options
+> are **Internal** — *"Available to members of this Aura project"*, marked
+> **Free**, and selected by default — and **External** — *"Provided via an
+> auto-generated endpoint"*, marked **$0.35 / hour**. Internal is correct for
+> everyone in the room, and the default is already right, so this is a "notice
+> it, don't touch it" moment rather than a step.
+>
+> The MCP toggle sitting greyed out underneath is the tell for why: the endpoint
+> and the MCP server are the same paid thing. Worth pointing at for ten seconds —
+> it sets up the close.
 
 > Aura can **auto-generate** the whole agent from a system prompt plus the graph
 > schema. Show it — it is a genuinely good demo. Then edit the tools by hand, so
@@ -173,12 +193,40 @@ Aura console → **Agents** → *Create agent*.
 > `similaritySearch`, then `text2cypher`. That is steps 04, 05 and 06, and
 > building them in that sequence makes this block recognition rather than new
 > material. It is also easiest-to-hardest, so nobody is stuck on the fiddly one.
+>
+> Under **Add tool** the console spells these **Cypher Template**, **Similarity
+> Search** and **Text2Cypher**. The camelCase names above are the API `type`
+> values in `aura/devops-agent.json` — same three things, two spellings, and
+> attendees are reading the console ones.
 
 ### Tool 1 — Cypher template (step 04)
 
 Start here, because it is the one they can fully read. Paste the "what is one
-person working on" query from `steps/04_cypher_template.py`, declare `$person`
-as a string parameter, and test it with `Alice`.
+person working on" query from `steps/04_cypher_template.py` into **Cypher
+query**, then use **+ Add parameter** to declare it.
+
+| Console field | Value |
+|---|---|
+| **Parameters** | `personName`, type string, described as *"The person's first name as recorded in the graph, e.g. Alice."* |
+| **Cypher query** | the step 04 query, with `$personName` where the name goes |
+
+> Mind the rename. Step 04's Python calls the parameter `$person`; the Aura tool
+> calls it `$personName`, and that is what `aura/devops-agent.json` ships. Either
+> works as long as the template and the declaration agree — but if someone is
+> diffing the two files, that is the difference they will find.
+
+The **Parameters** section is also where the point lands: the agent may choose
+the *value*, never the query. Note the description field on the parameter itself
+— that is what tells the model what to put there, and it is the same
+"descriptions are the engineering" lesson one level down.
+
+The teaching point is the same as slot 0:43: this tool cannot go wrong, and it
+cannot go anywhere it was not pointed. It also encodes the two-hop path through
+Team that free-form text2cypher is most likely to fumble.
+
+> Each tool has its own **Test** tab next to Configure. Use it — you can prove a
+> tool works before the agent exists, which makes debugging in front of a room
+> much less alarming than invoking the whole agent and guessing which tool failed.
 
 The teaching point is the same as slot 0:43: this tool cannot go wrong, and it
 cannot go anywhere it was not pointed. It also encodes the two-hop path through
@@ -189,27 +237,49 @@ Team that free-form text2cypher is most likely to fumble.
 The one worth doing by hand, and worth building in **two stages** so the room
 sees the difference.
 
-**Stage 1** — plain vector search. Pick the index step 02 built:
+**Stage 1** — plain vector search. Pick the index step 02 built, and leave
+**Return connected graph data** unticked:
 
-| Field | Value |
+| Console field | Value |
 |---|---|
-| Vector index | `task_embeddings` |
-| Embedding provider | `openai` |
-| Embedding model | `text-embedding-3-small` |
-| Top K | `4` |
+| **Index** | `task_embeddings` — a dropdown, so it only lists indexes that exist. If it is empty, step 02 did not run |
+| **Top K** | `4` |
+| **Embedding provider** | `OpenAI` |
+| **Embedding model** | `text-embedding-3-small` |
+| **Vector Dimensions** | greyed out, fills itself in as `1536` from the model |
+| **Return connected graph data** | leave unticked for now |
 
-Test it in the playground with *"if the authentication work goes wrong, what
-else is affected?"* — same shrug as step 05's plain retriever.
+Test it on the tool's own **Test** tab with *"if the authentication work goes
+wrong, what else is affected?"* — same shrug as step 05's plain retriever.
 
-**Stage 2** — add the post-processing Cypher, which is step 05's traversal.
-Ask again and watch the answer acquire teams and blast radius. One field, and
-the no-code agent gains the capability that step 05 built in Python.
+**Stage 2** — tick **Return connected graph data** ("Include connected nodes and
+relationships"). That reveals the **Graph query** box, which is step 05's
+traversal. Ask again and watch the answer acquire teams and blast radius. One
+checkbox and one field, and the no-code agent gains the capability that step 05
+built in Python.
 
-The Cypher is in `aura/devops-agent.json` under
-`config.post_processing_cypher`, and it is the same traversal as
-`VECTOR_CYPHER_RETRIEVAL` in `steps/_common.py` — the only difference is that
-Aura will accept whatever columns you return, while langchain-neo4j insists on
-exactly `text`, `score`, `metadata`.
+> The checkbox is the whole beat, so do not let anyone tick it early. Unticked,
+> this is a vector store. Ticked, it is GraphRAG. That is the entire argument of
+> the workshop expressed as one form control.
+
+The Cypher goes in the field the console calls **Graph query**; in
+`aura/devops-agent.json` the same thing is `config.post_processing_cypher`. It is
+the same string as `VECTOR_CYPHER_RETRIEVAL` in `steps/_common.py` — character
+for character, not merely equivalent. Attendees paste the exact fragment they
+read in step 05.
+
+> There is a **Generate draft with AI** panel above that box that will write the
+> traversal from a plain-language description. Worth showing *after* they have
+> pasted the real one, not before — the point of the step is that they recognise
+> the Cypher, not that something produced it for them.
+
+> Worth saying out loud if anyone asks why that is remarkable. It was not true
+> of the earlier version of this workshop: LangChain's `Neo4jVector` required
+> the retrieval query to return exactly `text`, `score`, `metadata`, so the
+> Python half concatenated every field into one string (and needed
+> `apoc.text.join` to do it) while Aura took ordinary named columns. Two
+> spellings of one traversal, presented as a mirror. `VectorCypherRetriever`
+> imposes no column contract, so there is now genuinely one string.
 
 > This is the beat that lands the whole two-path argument: the no-code tool is
 > not a toy subset. It does vector-plus-traversal GraphRAG, configured in a
@@ -257,9 +327,16 @@ ownership` → `Task_impact_and_ownership`) — cosmetic, but it shows up in tra
 Add it, give it a description, done. No configuration — it reads the schema
 itself.
 
-### Then test it in the playground
+### Then test the whole agent
 
 Same questions as step 05. Watch which tool it picks.
+
+Two places to test, and the difference matters when something misbehaves. Each
+tool has its own **Test** tab, which exercises that tool alone — use it to prove
+a tool works. The agent's chat panel exercises the *routing*, which is the thing
+step 07 says is the real engineering. A wrong answer from the chat panel and a
+right answer from the tool's own Test tab means the descriptions are at fault,
+not the Cypher.
 
 ### The closing beat
 
@@ -271,6 +348,32 @@ neo4j-cli aura agent invoke <id> --input "how many open tickets are there?" --rw
 The thing they just built by clicking is an HTTP endpoint and, with
 `--is-mcp-enabled`, an MCP server. Nothing was deployed. For a DevOpsDays room
 that lands better than any amount of framework talk.
+
+> **Do this from your own account, and do not ask the room to follow along.**
+> The console's **External** access setting — the auto-generated endpoint and the
+> MCP server — is priced at **$0.35 / hour** and needs a card. New agents default
+> to **Internal**, which is free and correct for the room. An Internal agent
+> **cannot be invoked through the API at all**: `agent invoke` returns
+> `agent invocation forbidden: agent may be disabled or private` (the API calls
+> this `is_private`; the console calls it Internal — same setting). Console chat
+> only.
+>
+> You can see which you have at a glance: in the Agents list an Internal agent
+> shows a padlock and the label **Free** next to its name. If anyone's agent is
+> missing the padlock, they have switched to External and are being billed for
+> it — worth a scan of the room before you finish.
+>
+> So this beat is a demo you give, not an exercise they do. Create yours with
+> `uv run steps/08_aura_agent.py create --external` before the session, show it,
+> and delete it after — it bills for as long as it exists:
+>
+> ```bash
+> neo4j-cli aura agent delete <id> --rw
+> ```
+>
+> Verify your own agent answers before the session. If you would rather not pay
+> for the demo at all, cut this beat: everything the workshop argues is already
+> proven by the console chat panel in step 08.
 
 ---
 
@@ -339,8 +442,9 @@ Rehearse against these. Anything not on this list, treat as live improv.
 | Aura Agent tool returns nothing | Embedding model mismatch | Must equal `EMBEDDING_MODEL` from step 02 |
 | No **Agents** in the console | Org settings | GenAI assistance + Aura Agent, org level — see PREWORK.md |
 | Can't create an agent | Not project admin | Personal free account instead of company org |
+| `agent invocation forbidden: agent may be disabled or private` | The agent is private, which is the free tier | Expected, not a permissions bug. Private agents are console-chat only; API/MCP access is paid. `08_aura_agent.py ask` now says this rather than passing the raw error through |
 | `Could not use APOC procedures` | `NEO4J_URI` points at a plain local Neo4j, not Aura | Aura bundles APOC Core. `make verify` catches this now |
-| text2cypher writes bad Cypher | It happens | Say so out loud. `verbose=True` shows the query — debug it live |
+| text2cypher writes bad Cypher | It happens | Say so out loud. Step 06 prints every generated query — debug it live |
 | Whole room rate-limited | Everyone on the shared key | Fall back to `make text2cypher` as a demo from the podium |
 
 ### Questions you will get about model config

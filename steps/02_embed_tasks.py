@@ -12,7 +12,7 @@ The 2023 original called:
 which embeds and creates the index in one line. Convenient, and wrong for us,
 for two reasons:
 
-  1. It creates the index implicitly. In step 06 we have to tell Aura Agent the
+  1. It creates the index implicitly. In step 08 we have to tell Aura Agent the
      index name, node label, and text property. Anything we cannot name, we
      cannot configure.
   2. Bare `OpenAIEmbeddings()` takes the library's default model. Aura Agent's
@@ -91,7 +91,7 @@ print(f"""
   {embedded}/{len(tasks)} tasks now carry a {dimension}-dimension embedding,
   and the index is online.
 
-  Write these two down — step 06 asks for them when you configure the Aura
+  Write these two down — step 08 asks for them when you configure the Aura
   Agent similarity-search tool:
 
     index name      {c.VECTOR_INDEX_NAME}

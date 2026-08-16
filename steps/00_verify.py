@@ -100,12 +100,18 @@ check("Neo4j Aura reachable", _neo4j)
 
 
 def _apoc():
-    """Steps 04 and 05 need APOC.
+    """Steps 06 and 07 need APOC — for schema introspection, nothing else.
 
-    LangChain's Neo4jGraph.refresh_schema() introspects the graph via
-    apoc.meta.data(). Aura bundles APOC Core, so this passes there — but if you
-    point NEO4J_URI at a plain local Neo4j container it will not, and the failure
-    surfaces two steps later as a wall of traceback rather than a missing plugin.
+    neo4j_graphrag.schema.get_schema() describes the graph to the text2cypher
+    prompt via apoc.meta.data(). Aura bundles APOC Core, so this passes there —
+    but if you point NEO4J_URI at a plain local Neo4j container it will not, and
+    the failure surfaces several steps later as a wall of traceback rather than
+    a missing plugin.
+
+    This used to say "steps 04/05". Step 05's traversal called apoc.text.join to
+    flatten its dependents list into a string, which it needed only because the
+    retriever of the day demanded a single text column. That is gone; the
+    traversal returns a real list now and step 05 no longer touches APOC.
     """
     d = c.driver()
     with d.session(database=c.NEO4J_DATABASE) as s:
@@ -114,7 +120,7 @@ def _apoc():
     return ""
 
 
-check("APOC available (needed by steps 04/05)", _apoc)
+check("APOC available (needed by steps 06/07)", _apoc)
 
 
 def _openai_key():

@@ -13,9 +13,9 @@ service or what breaks if the work ships badly, because those are relationships
 and relationships are not in the embedded text.
 
 So do both in one round trip. Match on meaning, then traverse from whatever
-matched. In langchain-neo4j that is the `retrieval_query` parameter: a Cypher
-fragment that runs after the vector search, with `node` bound to each hit and
-`score` to its similarity.
+matched. That is what `VectorCypherRetriever` is: a vector search with a Cypher
+fragment attached, running with `node` bound to each hit and `score` to its
+similarity.
 
 This is the first step that genuinely needs a graph. Step 03 was a vector store
 and step 04 was a query you could have written against any database. This one is
@@ -28,34 +28,33 @@ exact structure.
 """
 
 import _common as c
-from langchain_neo4j import Neo4jVector
+from neo4j_graphrag.retrievers import VectorCypherRetriever
 
 c.rule("Step 05 — vector + Cypher")
 
-# The traversal itself lives in _common as VECTOR_CYPHER_RETRIEVAL, because the
-# agent in step 05 and the Aura Agent tool in step 06 use the same one. Open it
-# and read it before running this — it is the whole content of this step.
+driver = c.driver()
+
+# Two retrievers over the SAME index, differing only in the Cypher attached.
 #
-# `node` and `score` are bound by the vector search that ran just before it.
-# Everything after is an ordinary traversal outward from the matched Task.
-plain = Neo4jVector.from_existing_index(
-    embedding=c.embeddings(),
-    url=c.NEO4J_URI,
-    username=c.NEO4J_USERNAME,
-    password=c.NEO4J_PASSWORD,
-    database=c.NEO4J_DATABASE,
+# The traversal itself lives in _common as VECTOR_CYPHER_RETRIEVAL, because step
+# 07's agent and step 08's Aura Agent tool use the identical string. Open it and
+# read it before running this — it is the whole content of this step.
+plain = VectorCypherRetriever(
+    driver,
     index_name=c.VECTOR_INDEX_NAME,
-    text_node_properties=["name", "description", "status"],
+    embedder=c.embedder(),
+    retrieval_query=c.PLAIN_RETRIEVAL,
+    result_formatter=c.plain_result,
+    neo4j_database=c.NEO4J_DATABASE,
 )
 
-enriched = Neo4jVector.from_existing_index(
-    embedding=c.embeddings(),
-    url=c.NEO4J_URI,
-    username=c.NEO4J_USERNAME,
-    password=c.NEO4J_PASSWORD,
-    database=c.NEO4J_DATABASE,
+enriched = VectorCypherRetriever(
+    driver,
     index_name=c.VECTOR_INDEX_NAME,
+    embedder=c.embedder(),
     retrieval_query=c.VECTOR_CYPHER_RETRIEVAL,
+    result_formatter=c.enriched_result,
+    neo4j_database=c.NEO4J_DATABASE,
 )
 
 QUESTIONS = [
@@ -70,12 +69,12 @@ llm = c.chat_model()
 
 
 def answer(store, question, k=2):
-    docs = store.similarity_search(question, k=k)
+    docs = store.search(query_text=question, top_k=k).items
     return docs, c.text_of(
         llm.invoke(
             "Answer using only this context. If the context does not contain "
             "the answer, say so.\n\n"
-            + "\n".join(d.page_content for d in docs)
+            + "\n".join(d.content for d in docs)
             + f"\n\nQuestion: {question}"
         )
     ).strip()
@@ -91,8 +90,10 @@ for question in QUESTIONS:
     docs, rich_answer = answer(enriched, question)
     print("\n  With the traversal attached, the retriever returns:\n")
     for d in docs:
-        print(f"    {d.page_content.strip()}")
+        print(f"    {d.content.strip()}")
     print(f"\n  ...and the answer becomes:\n    {rich_answer[:400]}")
+
+driver.close()
 
 print("""
 
@@ -115,6 +116,23 @@ print("""
   Two tools, each blind where the other sees, sharing one round trip and one
   database. That is the whole argument for a knowledge graph, and it is why
   this step exists.
+
+  ── One more thing, about the Cypher itself ────────────────────────────────
+
+  Open _common.py and compare VECTOR_CYPHER_RETRIEVAL with the
+  `post_processing_cypher` in aura/devops-agent.json. They are the same string,
+  character for character. In step 08 you will paste it into the Aura console.
+
+  That is worth a moment because it was not true until recently. The retriever
+  this workshop used before required its query to return exactly three columns —
+  text, score, metadata — so every field had to be concatenated into one long
+  string, and apoc.text.join was needed to flatten the dependents list. Aura
+  wants ordinary named columns. So there were two spellings of one traversal,
+  and the workshop called them a mirror.
+
+  A retriever that does not dictate your result shape removes an entire class of
+  that problem. It is a small thing here and a large one when the traversal is
+  the part you are actually iterating on.
 
   Next: make text2cypher
 """)

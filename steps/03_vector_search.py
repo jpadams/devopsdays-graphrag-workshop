@@ -15,36 +15,40 @@ Three parts:
 Part C is the one people argue with, so it is worth running rather than
 asserting.
 
-Note what goes into the prompt below: `text_node_properties` puts name,
-description AND status into each document's page_content. The model sees every
-field you see on screen. The failure in part B is NOT a trick where we hide the
-status column from it — that would prove nothing. It sees the statuses and is
-still wrong, which is the interesting part.
+Note what goes into the prompt below: the retrieval query returns name,
+description AND status, so each document the model sees carries every field you
+see on screen. The failure in part B is NOT a trick where we hide the status
+column from it — that would prove nothing. It sees the statuses and is still
+wrong, which is the interesting part.
 """
 
 import _common as c
-from langchain_neo4j import Neo4jVector
+from neo4j_graphrag.retrievers import VectorCypherRetriever
 
 c.rule("Step 03 — vector search")
 
-# from_existing_index, not from_existing_graph: step 02 already built the index,
-# and we want this code to fail loudly if it did not rather than quietly rebuild
-# a second one under a different name.
+driver = c.driver()
+
+# Step 02 already built the index, and this points at it by name so the code
+# fails loudly if it did not rather than quietly building a second one.
 #
-# text_node_properties concatenates these three fields into page_content, which
-# is what actually reaches the LLM. Retrieval is still driven purely by the
-# description embedding from step 02 — this only changes what comes back.
-store = Neo4jVector.from_existing_index(
-    embedding=c.embeddings(),
-    url=c.NEO4J_URI,
-    username=c.NEO4J_USERNAME,
-    password=c.NEO4J_PASSWORD,
-    database=c.NEO4J_DATABASE,
+# c.PLAIN_RETRIEVAL is the simplest retrieval query there is: return the matched
+# node's own properties and stop. No traversal, no relationships — that is step
+# 05's job, and the whole point of this step is to show what you get without it.
+store = VectorCypherRetriever(
+    driver,
     index_name=c.VECTOR_INDEX_NAME,
-    text_node_properties=["name", "description", "status"],
+    embedder=c.embedder(),
+    retrieval_query=c.PLAIN_RETRIEVAL,
+    result_formatter=c.plain_result,
+    neo4j_database=c.NEO4J_DATABASE,
 )
 
 QUESTION = "How many open tickets are there?"
+
+
+def search(question, k):
+    return store.search(query_text=question, top_k=k).items
 
 
 def ask(docs):
@@ -52,7 +56,7 @@ def ask(docs):
     return c.text_of(
         c.chat_model().invoke(
             "Answer using only this context.\n\n"
-            + "\n".join(d.page_content for d in docs)
+            + "\n".join(d.content for d in docs)
             + f"\n\nQuestion: {QUESTION}"
         )
     ).strip()
@@ -60,12 +64,7 @@ def ask(docs):
 
 def show(docs):
     for d in docs:
-        fields = dict(
-            line.split(": ", 1)
-            for line in d.page_content.strip().split("\n")
-            if ": " in line
-        )
-        print(f"      - {fields.get('name', '?'):<22} status={fields.get('status', '?')}")
+        print(f"      - {d.metadata['name']:<22} status={d.metadata['status']}")
 
 
 # ── A. what vector search is for ─────────────────────────────────────────────
@@ -78,11 +77,8 @@ print("""
   would miss it. Embeddings do not care about the words.
 """)
 
-for doc, score in store.similarity_search_with_score(
-    "How will the recommendation service be updated?", k=3
-):
-    name = doc.page_content.strip().split("\n")[0].replace("name: ", "")
-    print(f"    [{score:.3f}] {name}")
+for d in search("How will the recommendation service be updated?", 3):
+    print(f"    [{d.metadata['score']:.3f}] {d.metadata['name']}")
 
 # ── B. where it fails ────────────────────────────────────────────────────────
 print(f"""
@@ -95,20 +91,18 @@ print(f"""
   Nothing is hidden from it. Count the open ones yourself as they go past.
 """)
 
-small = store.similarity_search(QUESTION, k=4)
+small = search(QUESTION, 4)
 print(f"    the retriever returned {len(small)} documents:\n")
 show(small)
 
-small_open = sum(1 for d in small if "status: open" in d.page_content)
+small_open = sum(1 for d in small if d.metadata["status"] == "open")
 small_answer = ask(small)
 
-driver = c.driver()
 with driver.session(database=c.NEO4J_DATABASE) as session:
     truth = session.run(
         "MATCH (t:Task {status:'open'}) RETURN count(*) AS n"
     ).single()["n"]
     total = session.run("MATCH (t:Task) RETURN count(*) AS n").single()["n"]
-driver.close()
 
 k, unseen = len(small), total - len(small)
 
@@ -139,9 +133,11 @@ print(f"""
   The reasonable objection. Let's try k={total}.
 """)
 
-big = store.similarity_search(QUESTION, k=total)
-big_open = sum(1 for d in big if "status: open" in d.page_content)
+big = search(QUESTION, total)
+big_open = sum(1 for d in big if d.metadata["status"] == "open")
 big_answer = ask(big)
+
+driver.close()
 
 print(f"""    retrieved {len(big)} documents, {big_open} of them open
 

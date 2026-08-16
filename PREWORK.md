@@ -131,7 +131,7 @@ You want all five green:
 
 ```
   Neo4j Aura reachable................................ ok  (0 nodes — 0 is fine before step 01)
-  APOC available (needed by steps 04/05).............. ok
+  APOC available (needed by steps 06/07).............. ok
   OpenAI key valid.................................... ok  (132 models visible)
   chat model works (gpt-5.6-sol)...................... ok  ('ready')
   embedding model responds............................ ok  (1536 dimensions)

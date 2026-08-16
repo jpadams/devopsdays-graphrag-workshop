@@ -4,8 +4,8 @@
     uv run steps/07_agent.py "who maintains the payment service?"
 
 Nothing new is built here. The enriched retriever from step 05 and the
-text2cypher chain from step 06 are wrapped as tools and handed to a model that
-picks between them.
+text2cypher retriever from step 06 are wrapped as tools and handed to a model
+that picks between them.
 
 The interesting engineering is not the agent. It is the tool descriptions.
 
@@ -14,6 +14,13 @@ his tool descriptions needed work — the agent kept reaching for the wrong one.
 The descriptions below are the fix, and they are worth reading closely: each one
 says what the tool is for AND what it is not for, because "not for counting" is
 the sentence that stops the agent using vector search to answer "how many".
+
+Note the import list. The retrieval is all neo4j-graphrag; the agent is
+LangChain. That split is deliberate and the reason is in _common.chat_model:
+this step binds function tools, and neo4j-graphrag's own tool-calling path goes
+through /v1/chat/completions, which refuses function tools while reasoning
+effort is set. Its retrievers never bind tools, so they are unaffected. Use each
+library for the half it is best at.
 """
 
 import sys
@@ -21,33 +28,37 @@ import sys
 import _common as c
 from langchain.agents import create_agent
 from langchain.tools import tool
-from langchain_neo4j import GraphCypherQAChain, Neo4jVector
+from neo4j_graphrag.generation import GraphRAG
+from neo4j_graphrag.retrievers import Text2CypherRetriever, VectorCypherRetriever
 
 c.rule("Step 07 — the agent")
+
+driver = c.driver()
 
 # The enriched retriever from step 05, not the plain one from step 03. It
 # strictly dominates: same vector search, plus the ownership and dependency
 # traversal attached. There is no reason to give an agent the weaker tool.
-store = Neo4jVector.from_existing_index(
-    embedding=c.embeddings(),
-    url=c.NEO4J_URI,
-    username=c.NEO4J_USERNAME,
-    password=c.NEO4J_PASSWORD,
-    database=c.NEO4J_DATABASE,
+store = VectorCypherRetriever(
+    driver,
     index_name=c.VECTOR_INDEX_NAME,
+    embedder=c.embedder(),
     retrieval_query=c.VECTOR_CYPHER_RETRIEVAL,
+    result_formatter=c.enriched_result,
+    neo4j_database=c.NEO4J_DATABASE,
 )
 
-graph = c.graph()
-graph.refresh_schema()
-
-cypher_chain = GraphCypherQAChain.from_llm(
-    cypher_llm=c.chat_model(),
-    qa_llm=c.chat_model(),
-    graph=graph,
-    verbose=False,
-    cypher_prompt=c.cypher_generation_prompt(),
-    allow_dangerous_requests=True,
+cypher_rag = GraphRAG(
+    retriever=Text2CypherRetriever(
+        driver=driver,
+        llm=c.graphrag_llm(),
+        neo4j_schema=c.schema(driver),
+        custom_prompt=c.CYPHER_PROMPT,
+        neo4j_database=c.NEO4J_DATABASE,
+    ),
+    llm=c.graphrag_llm(),
+    # See _common.ANSWER_PROMPT — without it the model second-guesses correct
+    # rows and reports "None" for the indirect-dependency question.
+    prompt_template=c.answer_prompt(),
 )
 
 
@@ -68,9 +79,13 @@ def search_task_descriptions(query: str) -> str:
     Do NOT use this to count, total, rank, or aggregate anything: it returns a
     fixed number of nearest matches, so counting its results tells you about the
     search parameters and nothing about the graph.
+
+    Pass the user's full question as a sentence, not keywords. This searches by
+    meaning, so the wording of the query decides which tasks come back — a
+    compressed keyword version retrieves a different, usually noisier set.
     """
-    docs = store.similarity_search(query, k=4)
-    return "\n\n".join(d.page_content for d in docs)
+    items = store.search(query_text=query, top_k=4).items
+    return "\n\n".join(d.content for d in items)
 
 
 @tool("query_the_graph")
@@ -86,7 +101,7 @@ def query_the_graph(question: str) -> str:
     whole graph, or anything that follows relationships between nodes. Pass the
     user's full question as a sentence, not keywords.
     """
-    return str(cypher_chain.invoke({"query": question})["result"])
+    return str(cypher_rag.search(query_text=question).answer)
 
 
 agent = create_agent(
@@ -144,11 +159,13 @@ for q in QUESTIONS:
 
     print(f"\n  A: {c.text_of(result['messages'][-1])}\n")
 
+driver.close()
+
 print("""
   ── The point ──────────────────────────────────────────────────────────────
 
-  Three components: a vector retriever, a text2cypher chain, a router. Roughly
-  90 lines, most of which is prose in the tool docstrings.
+  Three components: a vector retriever, a text2cypher retriever, a router.
+  Roughly 90 lines, most of which is prose in the tool docstrings.
 
   Now go and build exactly this in the Aura console without writing any of it.
 

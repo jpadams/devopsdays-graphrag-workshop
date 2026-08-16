@@ -5,9 +5,12 @@ description = "DevOpsDays Portland — GraphRAG over a microservices knowledge g
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "neo4j>=5.28",
-    "langchain-neo4j>=0.4",
-    "langchain-openai>=0.3",
+    # Retrieval: Neo4j's own GraphRAG package. Every retriever comes from here.
+    "neo4j-graphrag>=1.18",
+    # Agent only (step 07's create_agent) plus the chat model it takes.
+    # Deliberately NOT langchain-neo4j — see steps/_common.py.
     "langchain>=1.0",
+    "langchain-openai>=0.3",
     "openai>=1.60",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",

@@ -153,7 +153,10 @@ model and the Python still works, while the no-code half silently stops matching
 anything — Aura Agent would be embedding queries into a different vector space
 than your index.
 
-Both halves have been run against the same AuraDB Free instance and agree:
+Both halves have been run against the same AuraDB Free instance and agree. The
+Python column is re-checked by `make all`; the Aura column was last verified on
+2026-08-16 by building the agent from `aura/devops-agent.json` and asking it each
+question:
 
 | Question | `make agent` (Python) | Aura Agent (no code) |
 |---|---|---|
@@ -187,13 +190,19 @@ and its [notebook](https://github.com/tomasonjo/blogs/blob/master/llm/devops_rag
 The dataset and the "how many open tickets" lesson are his and have aged well.
 The code around them has not, so it has been rewritten:
 
-- `langchain_community.graphs` → **`langchain_neo4j`**, where the Neo4j
-  integrations now live
+- `langchain_community.graphs` → **`neo4j-graphrag`**, Neo4j's own GraphRAG
+  package. Every retriever here comes from it; LangChain is kept for exactly one
+  job, `create_agent` in step 07
 - `create_openai_functions_agent` + `AgentExecutor` + a `hub.pull()` prompt →
   **`create_agent`**
-- `GraphCypherQAChain.from_llm(...)` now requires **`allow_dangerous_requests`**
+- `GraphCypherQAChain` + `allow_dangerous_requests=True` →
+  **`Text2CypherRetriever`**, which `EXPLAIN`s each generated query and refuses
+  anything that is not read-only
+- `Neo4jVector` → **`VectorCypherRetriever`**, which imposes no shape on your
+  retrieval query — so step 05's traversal and step 08's Aura config are now the
+  same string rather than two spellings of one idea
 - `Neo4jVector.from_existing_graph()` → an explicit `CREATE VECTOR INDEX`, so
-  step 06 has an index name, label and property it can point at
+  step 08 has an index name, label and property it can point at
 - bare `OpenAIEmbeddings()` → a **pinned** embedding model, for the reason above
 - model IDs are an env var checked against your key at `make verify`, not a
   constant that rots
