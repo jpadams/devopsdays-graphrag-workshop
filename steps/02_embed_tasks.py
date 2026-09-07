@@ -102,5 +102,14 @@ print(f"""
   That is the payoff for creating the index explicitly here rather than letting
   a helper create one implicitly under a name you never chose.
 
+  # Try creating an embedding manually with the OpenAI API
+  curl -s https://api.openai.com/v1/embeddings \\
+    -H "Authorization: Bearer $OPENAI_API_KEY" \\
+    -H "Content-Type: application/json" \\
+    -d '{{
+      "model": "text-embedding-3-small",
+      "input": "I like devops"
+    }}' | jq '.data[0].embedding'
+
   Next: make vector
 """)
