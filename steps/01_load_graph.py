@@ -68,5 +68,12 @@ print(f"""
   Cypher counted them, so this is the truth. In step 03 we will ask a vector
   retriever the same question and get a different, confident, wrong answer.
 
+  Look at
+  {CYPHER}
+  and run a query in the graph to see what was loaded!
+
+  MATCH (n)-[r]->(m)
+  RETURN n, r, m
+
   Next: make embed
 """)
