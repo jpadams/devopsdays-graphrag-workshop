@@ -108,8 +108,21 @@ print(f"""
     -H "Content-Type: application/json" \\
     -d '{{
       "model": "text-embedding-3-small",
-      "input": "I like devops"
-    }}' | jq '.data[0].embedding'
+      "input": "I like to refactor to make things scalable"
+    }}' | jq '.data[0].embedding' | pbcopy/wl-copy/clip/xclip/xsel
+
+  # Let's add the embedding as a param in Neo4j
+  :param embed => [.............]
+
+  # Let's get top 3 nearest matches
+  MATCH (t:Task)
+  SEARCH t IN (
+    VECTOR INDEX task_embeddings
+    FOR $embed
+    LIMIT 3
+  )
+  SCORE AS score
+  RETURN t.name, score, t.status, t.description;
 
   Next: make vector
 """)
