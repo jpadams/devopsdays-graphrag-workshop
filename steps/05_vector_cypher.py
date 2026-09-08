@@ -123,16 +123,5 @@ print("""
   `post_processing_cypher` in aura/devops-agent.json. They are the same string,
   character for character. In step 08 you will paste it into the Aura console.
 
-  That is worth a moment because it was not true until recently. The retriever
-  this workshop used before required its query to return exactly three columns —
-  text, score, metadata — so every field had to be concatenated into one long
-  string, and apoc.text.join was needed to flatten the dependents list. Aura
-  wants ordinary named columns. So there were two spellings of one traversal,
-  and the workshop called them a mirror.
-
-  A retriever that does not dictate your result shape removes an entire class of
-  that problem. It is a small thing here and a large one when the traversal is
-  the part you are actually iterating on.
-
   Next: make text2cypher
 """)
