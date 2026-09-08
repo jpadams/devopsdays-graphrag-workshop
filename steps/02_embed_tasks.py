@@ -109,7 +109,7 @@ print(f"""
     -d '{{
       "model": "text-embedding-3-small",
       "input": "I like to refactor to make things scalable"
-    }}' | jq '.data[0].embedding' | pbcopy/wl-copy/clip/xclip/xsel
+    }}' | jq '.data[0].embedding'
 
   # Let's add the embedding as a param in Neo4j
   :param embed => [.............]
